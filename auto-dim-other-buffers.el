@@ -341,6 +341,14 @@ EXCEPT-IN works by deactivating the dimmed face in specified window."
 When EXITING is non-nil, the outermost minibuffer is being exited."
   (let ((active (unless exiting (active-minibuffer-window))))
     (save-current-buffer
+      (when (and (bound-and-true-p auto-dim-other-buffers-mode)
+                 auto-dim-other-buffers-dim-inactive-minibuffer)
+        ;; Redisplay temporarily substitutes one of these buffers for the
+        ;; minibuffer's input buffer, without running buffer-list hooks.
+        ;; Prepare both, including buffers first used after initialization.
+        (dolist (name '(" *Echo Area 0*" " *Echo Area 1*"))
+          (let ((buffer (get-buffer-create name)))
+            (adob--remap-faces buffer buffer))))
       (dolist (frame (frame-list))
         (let* ((window (minibuffer-window frame))
                (dim (and (bound-and-true-p auto-dim-other-buffers-mode)

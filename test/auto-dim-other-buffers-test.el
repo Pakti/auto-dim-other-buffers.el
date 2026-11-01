@@ -46,3 +46,27 @@
       (auto-dim-other-buffers-mode -1)
       (customize-set-variable
        'auto-dim-other-buffers-dim-inactive-minibuffer nil))))
+
+(ert-deftest adob-test-echo-area-remapping-after-buffer-switch ()
+  (let ((auto-dim-other-buffers-dim-inactive-minibuffer t)
+        (buffer (generate-new-buffer "adob-switch-test")))
+    (unwind-protect
+        (save-window-excursion
+          (auto-dim-other-buffers-mode 1)
+          ;; Emacs can create/recreate these internal buffers without
+          ;; running buffer-list-update-hook.  Reproduce their fresh state.
+          (dolist (name '(" *Echo Area 0*" " *Echo Area 1*"))
+            (with-current-buffer (get-buffer-create name)
+              (adob--remap-remove-relative)))
+          (switch-to-buffer buffer)
+          (should (window-parameter (minibuffer-window) 'adob--dim))
+          (dolist (name '(" *Echo Area 0*" " *Echo Area 1*"))
+            (with-current-buffer name
+              (should adob--face-mode-remapping)
+              (should (assq 'default face-remapping-alist))))
+          (auto-dim-other-buffers-mode -1)
+          (dolist (name '(" *Echo Area 0*" " *Echo Area 1*"))
+            (with-current-buffer name
+              (should-not adob--face-mode-remapping))))
+      (auto-dim-other-buffers-mode -1)
+      (kill-buffer buffer))))
