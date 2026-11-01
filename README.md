@@ -51,6 +51,16 @@ the variable or using the following snippet:
           (assq-delete-all 'fringe auto-dim-other-buffers-affected-faces))
 
 
+To dim the inactive minibuffer and echo area as well, enable
+`auto-dim-other-buffers-dim-inactive-minibuffer` (disabled by default):
+
+    (setq auto-dim-other-buffers-dim-inactive-minibuffer t)
+
+The minibuffer stays undimmed while it is active.  This option is independent
+of `auto-dim-other-buffers-dim-on-switch-to-minibuffer`, which controls dimming
+of the previously selected window.
+
+
 ## Troubleshooting
 
 ### My screen is flickering

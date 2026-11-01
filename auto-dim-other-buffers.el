@@ -158,6 +158,21 @@ Which faces are modified is configured by the
   :group 'auto-dim-other-buffers)
 
 
+(defcustom auto-dim-other-buffers-dim-inactive-minibuffer nil
+  "Whether to dim the minibuffer window when it is inactive.
+This also dims messages displayed in the echo area.  An active
+minibuffer remains undimmed, independently of
+‘auto-dim-other-buffers-dim-on-switch-to-minibuffer’.
+Changes made through Customize take effect immediately."
+  :type 'boolean
+  :group 'auto-dim-other-buffers
+  :set (lambda (symbol value)
+         (set-default symbol value)
+         (when (and (bound-and-true-p auto-dim-other-buffers-mode)
+                    (fboundp 'adob--update-minibuffers))
+           (adob--update-minibuffers))))
+
+
 (defvar adob--last-buffer nil
   "Last selected buffer, i.e. buffer which is currently not dimmed.")
 (defvar adob--last-window nil
@@ -321,9 +336,32 @@ EXCEPT-IN works by deactivating the dimmed face in specified window."
     (dolist (wnd (get-buffer-window-list buffer 'n 'visible))
       (set-window-parameter wnd 'adob--dim (not (eq wnd except-in))))))
 
+(defun adob--update-minibuffers (&optional exiting)
+  "Update dimming of minibuffer windows, including their echo areas.
+When EXITING is non-nil, the outermost minibuffer is being exited."
+  (let ((active (unless exiting (active-minibuffer-window))))
+    (save-current-buffer
+      (dolist (frame (frame-list))
+        (let* ((window (minibuffer-window frame))
+               (dim (and (bound-and-true-p auto-dim-other-buffers-mode)
+                         auto-dim-other-buffers-dim-inactive-minibuffer
+                         (not (eq window active)))))
+          (when (and (bound-and-true-p auto-dim-other-buffers-mode)
+                     auto-dim-other-buffers-dim-inactive-minibuffer)
+            (adob--remap-faces (window-buffer window) window))
+          (unless (eq dim (window-parameter window 'adob--dim))
+            (set-window-parameter window 'adob--dim dim)
+            (adob--force-window-update window)))))))
+
+(defun adob--minibuffer-exit ()
+  "Dim the minibuffer when leaving the outermost recursive edit."
+  (adob--update-minibuffers (= (minibuffer-depth) 1)))
+
+
 (defun adob--update ()
   "Make sure that selected window is not dimmed.
 Dim previously selected window if selection has changed."
+  (adob--update-minibuffers)
   (when (or auto-dim-other-buffers-dim-on-switch-to-minibuffer
             (not (window-minibuffer-p)))
     (let* ((wnd (selected-window))
@@ -350,6 +388,7 @@ Dim previously selected window if selection has changed."
 
 (defun adob--rescan-windows ()
   "Rescan all windows in selected frame and dim all non-selected windows."
+  (adob--update-minibuffers)
   (let ((selected-window
          (or (and (not auto-dim-other-buffers-dim-on-switch-to-minibuffer)
                   (minibuffer-selected-window))
@@ -439,7 +478,8 @@ and frame’s doesn’t have focus."
   (setq adob--last-window (selected-window)
         adob--last-buffer (window-buffer adob--last-window))
   (dolist (buffer (buffer-list))
-    (adob--dim-buffer buffer adob--last-window)))
+    (adob--dim-buffer buffer adob--last-window))
+  (adob--update-minibuffers))
 
 ;;;###autoload
 (define-minor-mode auto-dim-other-buffers-mode
@@ -465,6 +505,8 @@ dimmed; this historical behaviour is where the mode gets its name from."
 
   ;; Add/remove all hooks
   (let ((callback (if auto-dim-other-buffers-mode #'add-hook #'remove-hook)))
+    (funcall callback 'minibuffer-setup-hook #'adob--update-minibuffers)
+    (funcall callback 'minibuffer-exit-hook #'adob--minibuffer-exit)
     (funcall callback 'window-configuration-change-hook #'adob--rescan-windows)
     (funcall callback 'buffer-list-update-hook #'adob--buffer-list-update-hook)
     ;; ‘after-focus-change-function’ has been added in Emacs 27 so we’re safe
@@ -491,7 +533,8 @@ dimmed; this historical behaviour is where the mode gets its name from."
       (advice-remove #'kill-all-local-variables
                      #'adob--kill-all-local-variables-advice)
       (setq adob--last-buffer nil adob--last-window nil)
-      (adob--remap-cycle-all nil))))
+      (adob--remap-cycle-all nil)
+      (adob--update-minibuffers))))
 
 
 (defcustom auto-dim-other-buffers-never-dim-buffer-functions nil
